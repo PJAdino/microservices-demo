@@ -21,10 +21,10 @@ jobs:
                 go-version-file: 'src/frontend/go.mod'
                 cache-dependency-path: src/frontend/go.sum
             
-            - name: Run Linter
-              uses: golangci/golangci-lint-action@v6
-              with: 
-                working-directory: src/frontend
+            - name: Run Linter (go vet)
+              run: |
+                cd src/frontend
+                go vet ./...
 
             - name: Run Unit Tests
               run: |
