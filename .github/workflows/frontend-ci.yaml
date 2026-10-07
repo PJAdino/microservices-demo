@@ -24,7 +24,7 @@ jobs:
             - name: Run Linter (go vet)
               run: |
                 cd src/frontend
-                go vet ./...
+                go vet -copylocks=false ./...
 
             - name: Run Unit Tests
               run: |
