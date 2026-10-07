@@ -1,0 +1,117 @@
+name: "frontend Continous Integration"
+permissions: 
+  contents: read
+  packages: write
+on:
+    push:
+        branches: [ "main" ]
+        paths:
+            - 'src/frontend/**'
+            - '.github/workflows/frontend-ci.yaml' 
+jobs:
+    test:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Set up Go environment
+              uses: actions/setup-go@v5
+              with:
+                go-version: '1.25'
+                cache-dependency-path: src/frontend/go.sum
+            
+            - name: Run Linter
+              uses: golangci/golangci-lint-action@v6
+              with: 
+                version: v1.60
+                working-directory: src/frontend
+
+            - name: Run Unit Tests
+              run: |
+                cd src/frontend
+                go test -v ./...
+    
+    build-and-scan: 
+        needs: [ "test" ]
+        runs-on: ubuntu-24.04 
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Build Docker Image(Local test)
+              uses: docker/build-push-action@v6
+              with:
+                context: src/frontend
+                load: true
+                tags: frontend:test
+                
+            - name: Scan Image for Vulnerabilities (Trivy)
+              uses: aquasecurity/trivy-action@master
+              with:
+                image-ref: 'frontend:test'
+                format: 'table'
+                exit-code: '1'
+                ignore-unfixed: true
+                severity: 'CRITICAL'
+
+            - name: Login to GHCR
+              uses: docker/login-action@v3
+              with:
+                registry: ghcr.io
+                username: ${{ github.actor }}
+                password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Extract metadata (lowercased tags)
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                images: ghcr.io/${{ github.repository_owner }}/frontend
+                tags: |
+                  type=raw,value=latest
+                  type=sha,format=long    
+
+            - name: Push Docker Image
+              uses: docker/build-push-action@v6
+              with:
+                context: src/frontend
+                push: true
+                tags: ${{ steps.meta.outputs.tags }}
+
+    # deploy-to-cloud-run:
+    #     needs: [ "build-and-scan" ]
+    #     runs-on: ubuntu-24.04
+    #     steps:
+    #       - name: Authenticate to Googl Cloud
+    #         uses: google-github-actions/auth@v2
+    #         with:
+    #           workload_identity_provider: ''
+    #           service_account: ''
+              
+    #       - name: Set up Google Cloud SDK
+    #         uses: google-github-actions/setup-gcloud@v2
+            
+    #       - name: Deploy Ephemeral Service to Cloud Run
+    #         id: deploy
+    #         run: |
+    #           gcloud run deploy frontend-test-${{ github.sha }} \
+    #         --image ghcr.io/${{ github.repository_owner }}/frontend:v1 \
+    #         --region us-central1 \
+    #         --platform managed \
+    #         --allow-unauthenticated \
+    #         --min-instances 0 \
+    #         --max-instances 1 \
+    #         --format 'value(status.url)' > service_url.txt
+
+    #       - name: Run Remote Smoke Test
+    #         run: |
+    #           URL=$(cat service_url.txt)
+    #           curl --fail --retry 3 --retry-delay 2 "${URL}/_healthz"
+
+              
+
+
+    
