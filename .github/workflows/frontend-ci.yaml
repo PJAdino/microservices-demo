@@ -2,6 +2,7 @@ name: "frontend Continous Integration"
 permissions: 
   contents: read
   packages: write
+  id-token: write
 on:
     push:
         branches: [ "main" ]
@@ -80,35 +81,39 @@ jobs:
                 push: true
                 tags: ${{ steps.meta.outputs.tags }}
 
-    # deploy-to-cloud-run:
-    #     needs: [ "build-and-scan" ]
-    #     runs-on: ubuntu-24.04
-    #     steps:
-    #       - name: Authenticate to Googl Cloud
-    #         uses: google-github-actions/auth@v2
-    #         with:
-    #           workload_identity_provider: ''
-    #           service_account: ''
+    deploy-to-cloud-run:
+        needs: [ "build-and-scan" ]
+        runs-on: ubuntu-24.04
+        steps:
+          - name: Authenticate to Googl Cloud
+            uses: google-github-actions/auth@v2
+            with:
+              workload_identity_provider: 'projects/77446935182/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+              service_account: 'github-runner-sa@online-boutique-510812.iam.gserviceaccount.com'
               
-    #       - name: Set up Google Cloud SDK
-    #         uses: google-github-actions/setup-gcloud@v2
+          - name: Set up Google Cloud SDK
+            uses: google-github-actions/setup-gcloud@v2
             
-    #       - name: Deploy Ephemeral Service to Cloud Run
-    #         id: deploy
-    #         run: |
-    #           gcloud run deploy frontend-test-${{ github.sha }} \
-    #         --image ghcr.io/${{ github.repository_owner }}/frontend:v1 \
-    #         --region us-central1 \
-    #         --platform managed \
-    #         --allow-unauthenticated \
-    #         --min-instances 0 \
-    #         --max-instances 1 \
-    #         --format 'value(status.url)' > service_url.txt
+          - name: Deploy Ephemeral Service to Cloud Run
+            id: deploy
+            run: |
+              gcloud run deploy frontend-test-${{ github.sha }} \
+                --image ghcr.io/${{ github.repository_owner }}/frontend:sha-${{ github.sha }} \
+                --region us-central1 \
+                --platform managed \
+                --allow-unauthenticated \
+                --min-instances 0 \
+                --max-instances 1 \
+                --format 'value(status.url)' > service_url.txt
 
-    #       - name: Run Remote Smoke Test
-    #         run: |
-    #           URL=$(cat service_url.txt)
-    #           curl --fail --retry 3 --retry-delay 2 "${URL}/_healthz"
+          - name: Run Remote Smoke Test
+            run: |
+              URL=$(cat service_url.txt)
+              echo "=================================================="
+              echo "Cloud Run Service Live URL: ${URL}"
+              echo "Healthcheck: ${URL}/_healthz"
+              echo "=================================================="
+              curl --fail --retry 3 --retry-delay 2 "${URL}/_healthz"
 
               
 
